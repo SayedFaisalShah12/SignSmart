@@ -34,7 +34,7 @@ def plot_training_history(history, save_dir='plots'):
     plt.close()
     print(f"Training history plots saved to {save_dir}")
 
-def evaluate_model(model, X_test, y_test, class_names=None, save_dir='plots'):
+def evaluate_model(model, test_gen, save_dir='plots'):
     """
     Evaluates the model on the test set and plots the confusion matrix.
     """
@@ -44,9 +44,15 @@ def evaluate_model(model, X_test, y_test, class_names=None, save_dir='plots'):
     print("--- Evaluating Model ---")
     
     # Predict
-    y_pred = model.predict(X_test)
+    y_pred = model.predict(test_gen)
     y_pred_classes = np.argmax(y_pred, axis=1)
-    y_true = np.argmax(y_test, axis=1)
+    
+    # Handle both DirectoryIterator and DataFrameIterator
+    if hasattr(test_gen, 'classes'):
+        y_true = test_gen.classes
+    else:
+        # For flow_from_dataframe, classes are in .classes
+        y_true = test_gen.classes
     
     # Accuracy
     accuracy = np.mean(y_pred_classes == y_true)
@@ -54,6 +60,10 @@ def evaluate_model(model, X_test, y_test, class_names=None, save_dir='plots'):
     
     # Classification Report
     print("\nClassification Report:")
+    # Get class labels from generator
+    class_indices = test_gen.class_indices
+    class_names = [k for k, v in sorted(class_indices.items(), key=lambda item: item[1])]
+    
     print(classification_report(y_true, y_pred_classes, target_names=class_names))
     
     # Confusion Matrix
@@ -68,3 +78,4 @@ def evaluate_model(model, X_test, y_test, class_names=None, save_dir='plots'):
     
     print(f"Confusion matrix plot saved to {save_dir}")
     return accuracy
+

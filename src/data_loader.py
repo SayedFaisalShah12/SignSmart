@@ -1,85 +1,82 @@
 import os
-import cv2
-import numpy as np
 import pandas as pd
-from sklearn.model_selection import train_test_split
-from tensorflow.keras.utils import to_categorical
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
 
-def load_data(dataset_path, img_size=(30, 30)):
+def get_data_generators(dataset_path, img_size=(30, 30), batch_size=32):
     """
-    Loads images and labels from the GTSRB Train dataset.
+    Creates memory-efficient data generators for training and validation.
     
     Args:
-        dataset_path (str): Path to the folder containing 'Train/' folder and 'Train.csv'
+        dataset_path (str): Path to the folder containing 'Train' folder.
         img_size (tuple): Target image size.
+        batch_size (int): Batch size.
         
     Returns:
-        tuple: (X_train, X_val, y_train, y_val)
+        tuple: (train_generator, validation_generator)
     """
-    images = []
-    labels = []
-    
     train_dir = os.path.join(dataset_path, 'Train')
     
     if not os.path.exists(train_dir):
         raise FileNotFoundError(f"Directory 'Train' not found in {dataset_path}")
-    
-    # Iterate through folders 0 - 42
-    for class_id in range(43):
-        path = os.path.join(train_dir, str(class_id))
-        if not os.path.exists(path):
-            continue
-            
-        for img_file in os.listdir(path):
-            try:
-                img_path = os.path.join(path, img_file)
-                image = cv2.imread(img_path)
-                image = cv2.resize(image, img_size)
-                images.append(image)
-                labels.append(class_id)
-            except Exception as e:
-                print(f"Error loading image {img_file}: {e}")
-                
-    images = np.array(images)
-    labels = np.array(labels)
-    
-    # Normalize images
-    images = images / 255.0
-    
-    # Split into Train/Val
-    X_train, X_val, y_train, y_val = train_test_split(images, labels, test_size=0.2, random_state=42)
-    
-    # One-hot encode labels
-    y_train = to_categorical(y_train, num_classes=43)
-    y_val = to_categorical(y_val, num_classes=43)
-    
-    return X_train, X_val, y_train, y_val
 
-def load_test_data(dataset_path, img_size=(30, 30)):
+    # Data Augmentation & Normalization for Training
+    train_datagen = ImageDataGenerator(
+        rescale=1/255.0,
+        rotation_range=10,
+        zoom_range=0.15,
+        width_shift_range=0.1,
+        height_shift_range=0.1,
+        shear_range=0.15,
+        validation_split=0.2  # 20% for validation
+    )
+
+    # Training Generator
+    train_generator = train_datagen.flow_from_directory(
+        train_dir,
+        target_size=img_size,
+        batch_size=batch_size,
+        class_mode='categorical',
+        subset='training',
+        shuffle=True
+    )
+
+    # Validation Generator
+    validation_generator = train_datagen.flow_from_directory(
+        train_dir,
+        target_size=img_size,
+        batch_size=batch_size,
+        class_mode='categorical',
+        subset='validation',
+        shuffle=False
+    )
+
+    return train_generator, validation_generator
+
+def get_test_generator(dataset_path, img_size=(30, 30), batch_size=32):
     """
-    Loads test images and labels from 'Test/' and 'Test.csv'.
+    Creates a memory-efficient generator for the test dataset using Test.csv.
     """
     test_csv_path = os.path.join(dataset_path, 'Test.csv')
-    test_dir = os.path.join(dataset_path, 'Test')
     
     if not os.path.exists(test_csv_path):
         raise FileNotFoundError(f"Test.csv not found in {dataset_path}")
         
     df = pd.read_csv(test_csv_path)
-    labels = df['ClassId'].values
-    img_paths = df['Path'].values
+    # Ensure ClassId is string for categorical mode
+    df['ClassId'] = df['ClassId'].astype(str)
     
-    images = []
-    for path in img_paths:
-        try:
-            full_path = os.path.join(dataset_path, path)
-            image = cv2.imread(full_path)
-            image = cv2.resize(image, img_size)
-            images.append(image)
-        except Exception as e:
-            print(f"Error loading test image {path}: {e}")
-            
-    images = np.array(images) / 255.0
-    labels = to_categorical(labels, num_classes=43)
+    test_datagen = ImageDataGenerator(rescale=1/255.0)
     
-    return images, labels
+    test_generator = test_datagen.flow_from_dataframe(
+        dataframe=df,
+        directory=dataset_path,
+        x_col="Path",
+        y_col="ClassId",
+        target_size=img_size,
+        batch_size=batch_size,
+        class_mode='categorical',
+        shuffle=False
+    )
+    
+    return test_generator
+

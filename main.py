@@ -1,9 +1,10 @@
 import argparse
 import os
 import tensorflow as tf
-from src.data_loader import load_data, load_test_data
+from src.data_loader import get_data_generators, get_test_generator
 from src.trainer import train_model, save_model
 from src.evaluator import plot_training_history, evaluate_model
+
 
 # Constants
 DATASET_PATH = 'dataset'
@@ -24,16 +25,17 @@ def main(args):
         print("Structure should be: dataset/Train/... and dataset/Test.csv")
         return
 
-    # 1. Load Data
-    print(f"Loading data with image size {img_size}...")
-    X_train, X_val, y_train, y_val = load_data(DATASET_PATH, img_size=img_size)
-    print(f"Training data shape: {X_train.shape}, Labels shape: {y_train.shape}")
+    # 1. Load Data (Memory efficient generators)
+    print(f"Initializing data generators with image size {img_size}...")
+    
+    train_gen, val_gen = get_data_generators(DATASET_PATH, 
+                                            img_size=img_size, 
+                                            batch_size=args.batch_size)
     
     # 2. Train Model
-    model, history = train_model(X_train, X_val, y_train, y_val, 
+    model, history = train_model(train_gen, val_gen, 
                                  model_type=args.model_type, 
-                                 epochs=args.epochs, 
-                                 batch_size=args.batch_size)
+                                 epochs=args.epochs)
     
     # 3. Save Model
     save_model(model, args.model_type)
@@ -44,11 +46,12 @@ def main(args):
     # 5. Evaluate on Test Set
     print("\n--- Testing Model ---")
     try:
-        X_test, y_test = load_test_data(DATASET_PATH, img_size=img_size)
-        evaluate_model(model, X_test, y_test)
+        test_gen = get_test_generator(DATASET_PATH, img_size=img_size, batch_size=args.batch_size)
+        evaluate_model(model, test_gen)
     except Exception as e:
         print(f"Skipping final test evaluation: {e}")
         print("Final validation accuracy was: ", history.history['val_accuracy'][-1])
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="SignSmart: Traffic Signal Recognition")
